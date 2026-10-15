@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>План → 3D</title>
+    <meta
+      name="description"
+      content="Из плана квартиры в JSON — 3D-сцена: стены с проёмами, расстановка мебели по правилам, проверка проходов."
+    />
+    <style>
+      :root {
+        --bg: #f4f1ec;
+        --panel: #fffdf9;
+        --ink: #1f1d1a;
+        --muted: #6f685f;
+        --line: #e5ddd1;
+        --accent: #2b7de9;
+        --ok: #2a8f5b;
+        --warn: #c9771f;
+        --bad: #c4463a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      }
+      .app {
+        display: grid;
+        grid-template-columns: 390px 1fr;
+        height: 100vh;
+      }
+      .panel {
+        overflow-y: auto;
+        background: var(--panel);
+        border-right: 1px solid var(--line);
+        padding: 20px 18px 28px;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 22px;
+        letter-spacing: -0.01em;
+      }
+      h2 {
+        margin: 22px 0 8px;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      h2 small {
+        text-transform: none;
+        letter-spacing: 0;
+        font-weight: 400;
+        color: var(--muted);
+        margin-left: 6px;
+      }
+      .lead {
+        margin: 0 0 14px;
+        color: var(--muted);
+      }
+      .controls {
+        display: grid;
+        gap: 10px;
+      }
+      label.row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 4px 10px;
+        align-items: center;
+      }
+      label.row input[type='range'] {
+        grid-column: 1 / -1;
+        width: 100%;
+        accent-color: var(--accent);
+      }
+      .value {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      select,
+      button,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      select {
+        width: 100%;
+        padding: 7px 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+      .checks {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+      }
+      .checks label {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        cursor: pointer;
+      }
+      .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .btn {
+        border: 1px solid var(--line);
+        background: #fff;
+        border-radius: 8px;
+        padding: 7px 12px;
+        cursor: pointer;
+      }
+      .btn:hover {
+        border-color: #cfc4b4;
+      }
+      .btn.primary {
+        background: var(--ink);
+        color: #fff;
+        border-color: var(--ink);
+      }
+      details.json summary {
+        cursor: pointer;
+        color: var(--muted);
+      }
+      textarea {
+        width: 100%;
+        height: 260px;
+        margin-top: 8px;
+        padding: 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+        resize: vertical;
+        background: #fff;
+      }
+      .link {
+        background: none;
+        border: 0;
+        padding: 0;
+        color: var(--accent);
+        cursor: pointer;
+      }
+      #errors {
+        margin: 12px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 6px;
+      }
+      #errors li {
+        padding: 8px 10px;
+        border-radius: 8px;
+      }
+      #errors li.error {
+        background: #fbe9e6;
+        color: var(--bad);
+      }
+      #errors li.warn {
+        background: #fdf1e2;
+        color: var(--warn);
+      }
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 18px;
+      }
+      .kpis div {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 10px;
+        background: #fff;
+      }
+      .kpis b {
+        display: block;
+        font-size: 18px;
+        font-variant-numeric: tabular-nums;
+      }
+      .kpis span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .kpis .bad b {
+        color: var(--bad);
+      }
+      ul.rules {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 4px;
+      }
+      ul.rules li {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        padding: 5px 0;
+        border-bottom: 1px dashed var(--line);
+      }
+      ul.rules b {
+        font-variant-numeric: tabular-nums;
+      }
+      ul.rules b.good {
+        color: var(--ok);
+      }
+      ul.rules b.bad {
+        color: var(--bad);
+      }
+      details.room-list,
+      #report details {
+        margin-top: 8px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        overflow: hidden;
+      }
+      #report summary {
+        padding: 8px 10px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      #report summary small {
+        color: var(--muted);
+        font-weight: 400;
+        margin-left: 4px;
+      }
+      .item {
+        display: grid;
+        grid-template-columns: 22px 1fr;
+        gap: 6px;
+        width: 100%;
+        text-align: left;
+        padding: 7px 10px;
+        border: 0;
+        border-top: 1px solid var(--line);
+        background: transparent;
+      }
+      button.item {
+        cursor: pointer;
+      }
+      button.item:hover {
+        background: #faf7f2;
+      }
+      .item.selected {
+        background: #eaf2fd;
+      }
+      .item .mark {
+        font-weight: 700;
+      }
+      .item.ok .mark {
+        color: var(--ok);
+      }
+      .item.warn .mark {
+        color: var(--warn);
+      }
+      .item.fail .mark {
+        color: var(--bad);
+      }
+      .item.skip {
+        color: var(--muted);
+      }
+      .item .body {
+        display: grid;
+      }
+      .item .why {
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      .item.fail .why {
+        color: var(--bad);
+      }
+      .item .stats {
+        display: none;
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .item.selected .stats,
+      .item.fail .stats {
+        display: block;
+      }
+      footer {
+        margin-top: 22px;
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      footer a {
+        color: var(--accent);
+      }
+      .viewport {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .viewport canvas {
+        display: block;
+        touch-action: none;
+      }
+      .labels {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .room-label {
+        display: grid;
+        text-align: center;
+        padding: 3px 8px;
+        border-radius: 7px;
+        background: rgba(255, 253, 249, 0.9);
+        border: 1px solid var(--line);
+        font-size: 12px;
+        line-height: 1.25;
+        white-space: nowrap;
+      }
+      .room-label span {
+        color: var(--muted);
+      }
+      .toolbar {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        display: flex;
+        gap: 6px;
+      }
+      .toolbar .btn.active {
+        background: var(--ink);
+        color: #fff;
+        border-color: var(--ink);
+      }
+      .legend {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        max-width: calc(100% - 24px);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(255, 253, 249, 0.92);
+        border: 1px solid var(--line);
+        font-size: 12px;
+      }
+      .legend[hidden] {
+        display: none;
+      }
+      .legend i {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        margin-right: 5px;
+        vertical-align: -2px;
+      }
+      .hint {
+        position: absolute;
+        left: 12px;
+        top: 12px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: rgba(255, 253, 249, 0.85);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      @media (max-width: 820px) {
+        .app {
+          grid-template-columns: 1fr;
+          grid-template-rows: 60vh auto;
+          height: auto;
+        }
+        .viewport {
+          order: -1;
+          height: 60vh;
+        }
+        .panel {
+          border-right: 0;
+          border-top: 1px solid var(--line);
+          padding: 16px;
+        }
+        .hint {
+          display: none;
+        }
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="panel">
+        <h1>План → 3D</h1>
+        <p class="lead">
+          Из плана квартиры в JSON строится 3D-сцена: стены с проёмами — из контуров комнат, мебель расставляется
+          перебором позиций по правилам, проходы проверяются поиском в ширину. Правьте JSON или ползунки — сцена
+          пересоберётся.
+        </p>
+
+        <div class="controls">
+          <select id="preset" aria-label="Планировка"></select>
+          <label class="row"
+            >Высота потолка <span class="value" id="heightVal"></span>
+            <input id="height" type="range" min="2.5" max="3.2" step="0.05" value="2.7"
+          /></label>
+          <label class="row"
+            >Минимальный проход <span class="value" id="passageVal"></span>
+            <input id="passage" type="range" min="0.6" max="1.0" step="0.05" value="0.7"
+          /></label>
+          <div class="checks">
+            <label><input id="cut" type="checkbox" /> Срез стен на 1,2 м</label>
+            <label><input id="zones" type="checkbox" /> Зоны и проходы</label>
+          </div>
+          <div class="buttons">
+            <button id="variant" class="btn" type="button">Другой вариант</button>
+            <span class="value" id="variantVal"></span>
+            <button id="glb" class="btn" type="button">Скачать .glb</button>
+          </div>
+          <details class="json">
+            <summary>Исходные данные (JSON)</summary>
+            <textarea id="json" spellcheck="false" aria-label="План в JSON"></textarea>
+            <button id="resetJson" class="link" type="button">вернуть исходный план</button>
+          </details>
+        </div>
+        <ul id="errors" hidden></ul>
+
+        <section id="report"></section>
+
+        <footer>
+          Максим Лутан · <a href="https://github.com/wrknatul/plan-to-3d" target="_blank" rel="noopener">код на GitHub</a>
+          · Three.js, без сборки
+        </footer>
+      </aside>
+
+      <main class="viewport" id="viewport">
+        <div class="hint">Вращение — мышью, клик по предмету — объяснение</div>
+        <div class="toolbar">
+          <button id="view3d" class="btn active" type="button">3D</button>
+          <button id="viewTop" class="btn" type="button">Сверху</button>
+        </div>
+        <div class="legend" id="legend" hidden>
+          <span><i style="background: rgba(46, 158, 98, 0.55)"></i>можно пройти от двери</span>
+          <span><i style="background: rgba(236, 135, 40, 0.7)"></i>отрезано от дверей</span>
+          <span><i style="background: rgba(138, 99, 210, 0.45)"></i>открывание двери</span>
+          <span><i style="background: rgba(61, 143, 209, 0.45)"></i>зона окна</span>
+          <span><i style="border: 2px solid #1f7a4c"></i>место для подхода</span>
+        </div>
+      </main>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

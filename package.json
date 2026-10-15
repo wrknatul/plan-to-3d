@@ -1,0 +1,10 @@
+{
+  "name": "plan-to-3d",
+  "private": true,
+  "type": "module",
+  "description": "Floor plan JSON to a furnished 3D scene: walls with openings, rule-based furniture layout, passage check",
+  "scripts": {
+    "test": "node --test",
+    "start": "python3 -m http.server 8765"
+  }
+}
